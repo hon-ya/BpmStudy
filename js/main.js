@@ -1,104 +1,149 @@
 class App {
     constructor(container, mediaStream) {
-        let self = this;
-        
-        this.container = container;
-        this.mediaStream = mediaStream;
-        
-        // create canvas
-        this.canvas = document.createElement('canvas');
-        this.canvas.width = window.innerWidth; 
-        this.canvas.height = window.innerHeight;
-        this.container.appendChild(this.canvas);
-        this.canvasContext = this.canvas.getContext( '2d' );
+        try
+        {
+            let self = this;
+            
+            this.container = container;
+            this.mediaStream = mediaStream;
+            
+            // create canvas
+            this.canvas = document.createElement('canvas');
+            this.canvas.width = window.innerWidth; 
+            this.canvas.height = window.innerHeight;
+            this.container.appendChild(this.canvas);
+            this.canvasContext = this.canvas.getContext( '2d' );
 
-        // register size change event
-        function resizeCanvas(){
-            self.canvas.width = window.innerWidth;
-            self.canvas.height = window.innerHeight;
-        }
-        window.onorientationchange = resizeCanvas;
-        window.onresize = resizeCanvas;
-
-        // create worker thread
-        this.worker = new Worker("js/worker.js");
-        this.worker.onmessage = function(e){
-            if(e.data.command == "tick") {
-                self.tick();
+            // register size change event
+            function resizeCanvas(){
+                self.canvas.width = window.innerWidth;
+                self.canvas.height = window.innerHeight;
             }
-            else {
-                console.log("unknown command received: " + e.data);
+            window.onorientationchange = resizeCanvas;
+            window.onresize = resizeCanvas;
+
+            // create worker thread
+            this.worker = new Worker("js/worker.js");
+            this.worker.onmessage = function(e){
+                if(e.data.command == "tick") {
+                    self.tick();
+                }
+                else {
+                    console.log("unknown command received: " + e.data);
+                }
+            };
+            this.interval = 25.0;
+    
+            // initialize metronome settings
+            this.version = "ver.20180312";
+            this.bpm = 120;  // beats per seconds
+            this.quaterNoteCount = 4;
+            this.quaterNoteDivision = 1;
+            this.noteSoundLength = 0.05;
+            this.totalNoteCount = this.quaterNoteCount * this.quaterNoteDivision;
+            this.secondsPerNote = 60 / this.bpm / this.quaterNoteDivision;
+            this.secondsPerBar = 60 / this.bpm * this.quaterNoteCount;
+            this.scheduleMargin = 0.1;  // seconds
+            this.isPlaying = false;
+            this.isAudioInitialized = false;
+            this.currentTime = 0;
+            this.currentPositionInBar = 0;
+            //this.microphoneInputDelay = 0;   // seconds
+            this.microphoneInputDelay = 0.01;   // for ios
+            //this.microphoneInputDelay = 0.12;   // for my pc setting
+
+            // initialize beat detector settings
+            this.beatsQueue = [];
+            this.lastBeatDetectedTime = 0;
+            this.beatThreshold = 0.10;
+            this.beatIntervalMin = 0.05;
+
+            // start animation frame loop
+            function frameLoop() {
+                self.calc();
+                self.draw();
+                requestAnimationFrame(frameLoop);
             }
-        };
-        this.interval = 25.0;
+            this.requestId = requestAnimationFrame(frameLoop);
 
-        // create audio context 
-        this.audioContext = new AudioContext({ latencyHint:'interactive', sampleRate:96000 });
-        this.scriptProcessor = this.audioContext.createScriptProcessor(256, 1, 1);
-        this.scriptProcessor.connect(this.audioContext.destination);
-        this.mediaStreamSource = this.audioContext.createMediaStreamSource(this.mediaStream);
-        this.mediaStreamSource.connect(this.scriptProcessor);
-
-        // initialize metronome settings
-        this.bpm = 120;  // beats per seconds
-        this.quaterNoteCount = 4;
-        this.quaterNoteDivision = 1;
-        this.noteSoundLength = 0.05;
-        this.totalNoteCount = this.quaterNoteCount * this.quaterNoteDivision;
-        this.secondsPerNote = 60 / this.bpm / this.quaterNoteDivision;
-        this.secondsPerBar = 60 / this.bpm * this.quaterNoteCount;
-        this.scheduleMargin = 0.1;  // seconds
-        this.isPlaying = false;
-        this.currentTime = 0;
-        this.currentPositionInBar = 0;
-        //this.microphoneInputDelay = 0;   // seconds
-        this.microphoneInputDelay = 0.12;   // for my pc setting
-
-        // initialize beat detector settings
-        this.beatsQueue = [];
-        this.lastBeatDetectedTime = 0;
-        this.beatThreshold = 0.10;
-        this.beatIntervalMin = 0.1;
-
-        // start animation frame loop
-        function frameLoop() {
-            self.calc();
-            self.draw();
-            requestAnimationFrame(frameLoop);
+            // initialize user interface
+            this.canvas.onclick = function(){
+                self.togglePlay();
+            };
         }
-        this.requestId = requestAnimationFrame(frameLoop);
+        catch(error)
+        {
+            alert("failed: " + error.message + ":" + error.stack);
+        }
+    }
 
-        // start beat detecting
-        this.scriptProcessor.onaudioprocess = function(event) {
-            self.updateBeats(event);
-        };
+    initializeAudio(){
+        try
+        {
+            // call here from user operation (e.g. button click, touch, etc...)
+            this.audioContext = new AudioContext({ latencyHint:'interactive', sampleRate:96000 });
 
-        // initialize user interface
-        this.canvas.onclick = function(){
-            self.togglePlay();
-        };
+            // play dummy sounds to enable audio
+            var buffer = this.audioContext.createBuffer(1, 1, 22050);
+            var node = this.audioContext.createBufferSource();
+            node.buffer = buffer;
+            node.start(0);
+
+            this.scriptProcessor = this.audioContext.createScriptProcessor(256, 1, 1);
+            this.scriptProcessor.connect(this.audioContext.destination);
+            this.mediaStreamSource = this.audioContext.createMediaStreamSource(this.mediaStream);
+            this.mediaStreamSource.connect(this.scriptProcessor);
+
+            let self = this;
+            this.scriptProcessor.onaudioprocess = function(event) {
+                self.updateBeats(event);
+            };
+        }
+        catch(error)
+        {
+            alert("failed: " + error.message + ":" + error.stack);
+        }
     }
 
     start() {
-        if(this.isPlaying){
-            return;
-        }
-        this.isPlaying = true;
+        try
+        {
+            if(this.isPlaying){
+                return;
+            }
+            this.isPlaying = true;
 
-        this.beatsQueue = [];
-        this.startTime = this.audioContext.currentTime + this.scheduleMargin;
-        this.nextScheduleNote = 0;
-        this.nextScheduleNoteTime = this.startTime;
-        this.worker.postMessage({ command:"start", interval:this.interval });
+            if(!this.isAudioInitialized){
+                this.initializeAudio();
+                this.isAudioInitialized = true;
+            }
+    
+            this.beatsQueue = [];
+            this.startTime = this.audioContext.currentTime + this.scheduleMargin;
+            this.nextScheduleNote = 0;
+            this.nextScheduleNoteTime = this.startTime;
+            this.worker.postMessage({ command:"start", interval:this.interval });
+        }
+        catch(error)
+        {
+            alert("failed: " + error.message + ":" + error.stack);
+        }
     }
 
     stop() {
-        if(!this.isPlaying){
-            return;
-        }
-        this.isPlaying = false;
+        try
+        {
+            if(!this.isPlaying){
+                return;
+            }
+            this.isPlaying = false;
 
-        this.worker.postMessage({ command:"stop" });
+            this.worker.postMessage({ command:"stop" });
+        }
+        catch(error)
+        {
+            alert("failed: " + error.message + ":" + error.stack);
+        }
     }
 
     togglePlay() {
@@ -111,93 +156,120 @@ class App {
     }
 
     updateBeats(e) {
-        let inputs = new Float32Array(e.inputBuffer.length);
-        e.inputBuffer.copyFromChannel(inputs, 0, 0);
+        try
+        {
+            let inputs = e.inputBuffer.getChannelData(0);
 
-        let maxValue = Math.max.apply(null, inputs);
-        let value = maxValue > this.beatThreshold ? maxValue : 0;
+            let maxValue = Math.max.apply(null, inputs);
+            let value = maxValue > this.beatThreshold ? maxValue : 0;
 
-        let currentTime = e.playbackTime;
-        if(value > 0 && (this.lastBeatDetectedTime + this.beatIntervalMin) < currentTime) {
-            this.beatsQueue.push({ volume:value, time:currentTime });
-            this.lastBeatDetectedTime = currentTime;
+            let currentTime = e.playbackTime;
+            if(value > 0 && (this.lastBeatDetectedTime + this.beatIntervalMin) < currentTime) {
+                this.beatsQueue.push({ volume:value, time:currentTime });
+                this.lastBeatDetectedTime = currentTime;
+            }
+        }
+        catch(error)
+        {
+            alert("failed: " + error.message + ":" + error.stack);
         }
     }
 
     calc() {
-        if(this.isPlaying)
+        try
         {
-            this.currentTime = this.audioContext.currentTime;
-            this.currentPositionInBar = Math.max(0, ((this.currentTime - this.startTime) % this.secondsPerBar) / this.secondsPerBar);
-
-            if(this.microphoneInputDelay == 0 && this.beatsQueue.length > 1)
+            if(this.isPlaying)
             {
-                this.microphoneInputDelay = this.beatsQueue[0].time - this.startTime;
-                console.log(`microphoneInputDelay = ${this.microphoneInputDelay}`);
+                this.currentTime = this.audioContext.currentTime;
+                this.currentPositionInBar = Math.max(0, ((this.currentTime - this.startTime) % this.secondsPerBar) / this.secondsPerBar);
+
+                if(this.microphoneInputDelay == 0 && this.beatsQueue.length > 1)
+                {
+                    this.microphoneInputDelay = this.beatsQueue[0].time - this.startTime;
+                    console.log(`microphoneInputDelay = ${this.microphoneInputDelay}`);
+                }
             }
+        }
+        catch(error)
+        {
+            alert("failed: " + error.message + ":" + error.stack);
         }
     }
 
     draw() {
-        // clear screen
-        this.canvasContext.fillStyle = "cornsilk";
-        this.canvasContext.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        // draw bpm
-        this.canvasContext.fillStyle = "black";
-        this.canvasContext.font = `${this.canvas.height / 3}px Meyro`;
-        this.canvasContext.textBaseline = "middle"; 
-        this.canvasContext.textAlign = "center";
-        this.canvasContext.fillText(`${this.bpm}`, this.canvas.width / 2, this.canvas.height / 3);
-
-        // draw marker
-        let xmargin = this.canvas.width / 10;
-        let barWidth = this.canvas.width - xmargin * 2;
-        let noteOffset = barWidth / this.totalNoteCount;
+        try
         {
-            let x = this.currentPositionInBar * barWidth + xmargin;
-            let y = this.canvas.height / 4 * 3;
-            let radius = this.canvas.width / 200;
+            // clear screen
+            this.canvasContext.fillStyle = "cornsilk";
+            this.canvasContext.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-            this.canvasContext.beginPath();
-            this.canvasContext.arc(x, y, radius, 0, Math.PI * 2, false);
-            this.canvasContext.fill();
-        }
+            // draw version
+            this.canvasContext.fillStyle = "black";
+            this.canvasContext.font = `${this.canvas.width / 50}px Meyro`;
+            this.canvasContext.textBaseline = "top"; 
+            this.canvasContext.textAlign = "left";
+            this.canvasContext.fillText(`${this.version}`, 0, 0);
 
-        // draw notes
-        {
-            let radius_base = this.canvas.width / 100;
-            let currentNote = Math.floor(this.currentPositionInBar * this.totalNoteCount);
-            for(let i = 0; i < this.totalNoteCount + 1; i++) {
-                let x = xmargin + noteOffset * i;
+            // draw bpm
+            this.canvasContext.fillStyle = "black";
+            this.canvasContext.font = `${this.canvas.height / 3}px Meyro`;
+            this.canvasContext.textBaseline = "middle"; 
+            this.canvasContext.textAlign = "center";
+            this.canvasContext.fillText(`${this.bpm}`, this.canvas.width / 2, this.canvas.height / 3);
+
+            // draw marker
+            let xmargin = this.canvas.width / 10;
+            let barWidth = this.canvas.width - xmargin * 2;
+            let noteOffset = barWidth / this.totalNoteCount;
+            {
+                let x = this.currentPositionInBar * barWidth + xmargin;
                 let y = this.canvas.height / 4 * 3;
-                let radius = i % this.quaterNoteDivision == 0 ? radius_base * 2 : radius_base;
+                let radius = this.canvas.width / 200;
 
                 this.canvasContext.beginPath();
                 this.canvasContext.arc(x, y, radius, 0, Math.PI * 2, false);
-                if(i == currentNote) {
-                    this.canvasContext.fillStyle = "black";
-                    this.canvasContext.fill();
-                }
-                else {
-                    this.canvasContext.stroke();
+                this.canvasContext.fill();
+            }
+
+            // draw notes
+            {
+                let radius_base = this.canvas.width / 100;
+                let currentNote = Math.floor(this.currentPositionInBar * this.totalNoteCount);
+                for(let i = 0; i < this.totalNoteCount + 1; i++) {
+                    let x = xmargin + noteOffset * i;
+                    let y = this.canvas.height / 4 * 3;
+                    let radius = i % this.quaterNoteDivision == 0 ? radius_base * 2 : radius_base;
+
+                    this.canvasContext.beginPath();
+                    this.canvasContext.arc(x, y, radius, 0, Math.PI * 2, false);
+                    if(i == currentNote) {
+                        this.canvasContext.fillStyle = "black";
+                        this.canvasContext.fill();
+                    }
+                    else {
+                        this.canvasContext.stroke();
+                    }
                 }
             }
-        }
 
-        // draw user beats
-        let currentBarNumber = Math.floor((this.currentTime - this.startTime - this.microphoneInputDelay) / this.secondsPerBar);
-        for(let i = 0; i < this.beatsQueue.length; i++){
-            let time = this.beatsQueue[i].time;
-            let positionInBar = Math.max(0, ((time - this.startTime - this.microphoneInputDelay) % this.secondsPerBar) / this.secondsPerBar);
-            let barNumber = Math.floor((time - this.startTime - this.microphoneInputDelay) / this.secondsPerBar);
-            let radius = 10;
-            let x = positionInBar * barWidth + xmargin;
-            let y = this.canvas.height / 5 * 3 - (currentBarNumber - barNumber) * radius * 3;
-            
-            this.canvasContext.beginPath();
-            this.canvasContext.arc(x, y, radius, 0, Math.PI * 2, false);
-            this.canvasContext.fill();
+            // draw user beats
+            let currentBarNumber = Math.floor((this.currentTime - this.startTime - this.microphoneInputDelay) / this.secondsPerBar);
+            for(let i = 0; i < this.beatsQueue.length; i++){
+                let time = this.beatsQueue[i].time;
+                let positionInBar = Math.max(0, ((time - this.startTime - this.microphoneInputDelay) % this.secondsPerBar) / this.secondsPerBar);
+                let barNumber = Math.floor((time - this.startTime - this.microphoneInputDelay) / this.secondsPerBar);
+                let radius = 10;
+                let x = positionInBar * barWidth + xmargin;
+                let y = this.canvas.height / 5 * 3 - (currentBarNumber - barNumber) * radius * 3;
+                
+                this.canvasContext.beginPath();
+                this.canvasContext.arc(x, y, radius, 0, Math.PI * 2, false);
+                this.canvasContext.fill();
+            }
+        }
+        catch(error)
+        {
+            alert("failed: " + error.message + ":" + error.stack);
         }
     }
 
@@ -208,24 +280,31 @@ class App {
     }
 
     scheduleNote() {
-        var osc = this.audioContext.createOscillator();
-        osc.connect(this.audioContext.destination);
+        try
+        {
+            var osc = this.audioContext.createOscillator();
+            osc.connect(this.audioContext.destination);
 
-        if (this.nextScheduleNote == 0){
-            osc.frequency.setValueAtTime(880.0, 0);
-        }
-        else if (this.nextScheduleNote % this.quaterNoteDivision == 0 ) {
-            osc.frequency.setValueAtTime(440.0, 0);
-        }
-        else {
-            osc.frequency.setValueAtTime(220.0, 0);
-        }
-    
-        osc.start(this.nextScheduleNoteTime);
-        osc.stop(this.nextScheduleNoteTime + this.noteSoundLength);
+            if (this.nextScheduleNote == 0){
+                osc.frequency.setValueAtTime(880.0, 0);
+            }
+            else if (this.nextScheduleNote % this.quaterNoteDivision == 0 ) {
+                osc.frequency.setValueAtTime(440.0, 0);
+            }
+            else {
+                osc.frequency.setValueAtTime(220.0, 0);
+            }
+        
+            osc.start(this.nextScheduleNoteTime);
+            osc.stop(this.nextScheduleNoteTime + this.noteSoundLength);
 
-        this.nextScheduleNote = (this.nextScheduleNote + 1) % this.totalNoteCount;
-        this.nextScheduleNoteTime += this.secondsPerNote;
+            this.nextScheduleNote = (this.nextScheduleNote + 1) % this.totalNoteCount;
+            this.nextScheduleNoteTime += this.secondsPerNote;
+        }
+        catch(e)
+        {
+            alert("failed: " + e.message + ":" + e.stack);
+        }
     }
 }
 
@@ -247,7 +326,7 @@ window.onload = function() {
         window.msCancelAnimationFrame ||
         window.oCancelAnimationFrame ||
         function(requestId) {
-            w.clearTimeout(requestId);
+            window.clearTimeout(requestId);
         };
     })();
 
@@ -262,13 +341,13 @@ window.onload = function() {
 
     navigator.getUserMedia (
         {
-           audio: true
+            audio: true
         },
         function(mediaStream) {
             let app = new App(container, mediaStream);
         },
         function(e) {
             alert("failed to getUserMedia(): " + e.name);
-         }
+        }
     );
 }
