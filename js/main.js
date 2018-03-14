@@ -1,10 +1,10 @@
 class App {
-    constructor(container, mediaStream) {
+    constructor(mediaStream) {
         try
         {
             let self = this;
             
-            this.container = container;
+            this.container = document.getElementById('container');
             this.mediaStream = mediaStream;
             
             // create canvas
@@ -59,8 +59,16 @@ class App {
             this.requestId = requestAnimationFrame(frameLoop);
 
             // initialize user interface
+            document.getElementById('start').onclick = function(){
+                document.getElementById('layer').style.display = 'none';
+                document.getElementById('popup').style.display = 'none';
+                self.start();
+            };
+            
             this.canvas.onclick = function(){
-                self.togglePlay();
+                self.stop();
+                document.getElementById('layer').style.display = 'inline';
+                document.getElementById('popup').style.display = 'inline';
             };
 
             this.readSettings();
@@ -337,14 +345,12 @@ window.onload = function() {
         navigator.mozGetUserMedia ||
         navigator.msGetUserMedia);
 
-    let container = document.getElementById('container');
-
     navigator.getUserMedia (
         {
             audio: true
         },
         function(mediaStream) {
-            let app = new App(container, mediaStream);
+            let app = new App(mediaStream);
         },
         function(e) {
             alert("failed to getUserMedia(): " + e.name);
