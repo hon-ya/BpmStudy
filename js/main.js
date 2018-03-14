@@ -35,28 +35,20 @@ class App {
             this.interval = 25.0;
     
             // initialize metronome settings
-            this.version = "ver.20180312";
-            this.bpm = 120;  // beats per seconds
+            this.version = "ver.20180314";
             this.quaterNoteCount = 4;
             this.quaterNoteDivision = 1;
             this.noteSoundLength = 0.05;
             this.totalNoteCount = this.quaterNoteCount * this.quaterNoteDivision;
-            this.secondsPerNote = 60 / this.bpm / this.quaterNoteDivision;
-            this.secondsPerBar = 60 / this.bpm * this.quaterNoteCount;
             this.scheduleMargin = 0.1;  // seconds
             this.isPlaying = false;
             this.isAudioInitialized = false;
             this.currentTime = 0;
             this.currentPositionInBar = 0;
-            //this.microphoneInputDelay = 0;   // seconds
-            this.microphoneInputDelay = 0.01;   // for ios
-            //this.microphoneInputDelay = 0.12;   // for my pc setting
 
             // initialize beat detector settings
             this.beatsQueue = [];
             this.lastBeatDetectedTime = 0;
-            this.beatThreshold = 0.10;
-            this.beatIntervalMin = 0.05;
 
             // start animation frame loop
             function frameLoop() {
@@ -70,6 +62,8 @@ class App {
             this.canvas.onclick = function(){
                 self.togglePlay();
             };
+
+            this.readSettings();
         }
         catch(error)
         {
@@ -105,6 +99,15 @@ class App {
         }
     }
 
+    readSettings() {
+        this.bpm = parseFloat(document.getElementById('bpm').value);
+        this.beatDelay = parseFloat(document.getElementById('beatDelay').value);
+        this.secondsPerNote = 60 / this.bpm / this.quaterNoteDivision;
+        this.secondsPerBar = 60 / this.bpm * this.quaterNoteCount;
+        this.beatThreshold = parseFloat(document.getElementById('beatThreshold').value);
+        this.beatIntervalMin = parseFloat(document.getElementById('beatIntervalMin').value);
+    }
+
     start() {
         try
         {
@@ -117,11 +120,14 @@ class App {
                 this.initializeAudio();
                 this.isAudioInitialized = true;
             }
+
+            this.readSettings();
     
             this.beatsQueue = [];
             this.startTime = this.audioContext.currentTime + this.scheduleMargin;
             this.nextScheduleNote = 0;
             this.nextScheduleNoteTime = this.startTime;
+
             this.worker.postMessage({ command:"start", interval:this.interval });
         }
         catch(error)
@@ -182,12 +188,6 @@ class App {
             {
                 this.currentTime = this.audioContext.currentTime;
                 this.currentPositionInBar = Math.max(0, ((this.currentTime - this.startTime) % this.secondsPerBar) / this.secondsPerBar);
-
-                if(this.microphoneInputDelay == 0 && this.beatsQueue.length > 1)
-                {
-                    this.microphoneInputDelay = this.beatsQueue[0].time - this.startTime;
-                    console.log(`microphoneInputDelay = ${this.microphoneInputDelay}`);
-                }
             }
         }
         catch(error)
@@ -253,11 +253,11 @@ class App {
             }
 
             // draw user beats
-            let currentBarNumber = Math.floor((this.currentTime - this.startTime - this.microphoneInputDelay) / this.secondsPerBar);
+            let currentBarNumber = Math.floor((this.currentTime - this.startTime - this.beatDelay) / this.secondsPerBar);
             for(let i = 0; i < this.beatsQueue.length; i++){
                 let time = this.beatsQueue[i].time;
-                let positionInBar = Math.max(0, ((time - this.startTime - this.microphoneInputDelay) % this.secondsPerBar) / this.secondsPerBar);
-                let barNumber = Math.floor((time - this.startTime - this.microphoneInputDelay) / this.secondsPerBar);
+                let positionInBar = Math.max(0, ((time - this.startTime - this.beatDelay) % this.secondsPerBar) / this.secondsPerBar);
+                let barNumber = Math.floor((time - this.startTime - this.beatDelay) / this.secondsPerBar);
                 let radius = 10;
                 let x = positionInBar * barWidth + xmargin;
                 let y = this.canvas.height / 5 * 3 - (currentBarNumber - barNumber) * radius * 3;
