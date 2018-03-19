@@ -35,11 +35,8 @@ class App {
             this.interval = 25.0;
     
             // initialize metronome settings
-            this.version = "ver.20180314";
-            this.quaterNoteCount = 4;
-            this.quaterNoteDivision = 1;
+            this.version = "ver.20180319";
             this.noteSoundLength = 0.05;
-            this.totalNoteCount = this.quaterNoteCount * this.quaterNoteDivision;
             this.scheduleMargin = 0.1;  // seconds
             this.isPlaying = false;
             this.isAudioInitialized = false;
@@ -109,6 +106,9 @@ class App {
 
     readSettings() {
         this.bpm = parseFloat(document.getElementById('bpm').value);
+        this.quaterNoteCount = parseInt(document.getElementById('quaterNoteCount').value);
+        this.quaterNoteDivision = parseInt(document.getElementById('quaterNoteDivision').value);
+        this.totalNoteCount = this.quaterNoteCount * this.quaterNoteDivision;
         this.beatDelay = parseFloat(document.getElementById('beatDelay').value);
         this.secondsPerNote = 60 / this.bpm / this.quaterNoteDivision;
         this.secondsPerBar = 60 / this.bpm * this.quaterNoteCount;
