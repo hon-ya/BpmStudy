@@ -35,7 +35,7 @@ class App {
             this.interval = 25.0;
     
             // initialize metronome settings
-            this.version = "ver.20180319";
+            this.version = "ver.20180327";
             this.noteSoundLength = 0.05;
             this.scheduleMargin = 0.1;  // seconds
             this.isPlaying = false;
@@ -114,6 +114,9 @@ class App {
         this.secondsPerBar = 60 / this.bpm * this.quaterNoteCount;
         this.beatThreshold = parseFloat(document.getElementById('beatThreshold').value);
         this.beatIntervalMin = parseFloat(document.getElementById('beatIntervalMin').value);
+        this.invisibleInterval = parseFloat(document.getElementById('invisibleInterval').value);
+        this.isNoteDisplayEnabled = true;
+        this.isSoundEnabled = true;
     }
 
     start() {
@@ -195,7 +198,20 @@ class App {
             if(this.isPlaying)
             {
                 this.currentTime = this.audioContext.currentTime;
-                this.currentPositionInBar = Math.max(0, ((this.currentTime - this.startTime) % this.secondsPerBar) / this.secondsPerBar);
+
+                let elapsedTime = Math.max(0, this.currentTime - this.startTime);
+                this.currentPositionInBar = Math.max(0, ((elapsedTime) % this.secondsPerBar) / this.secondsPerBar);
+
+                if(this.invisibleInterval == 0 || Math.floor(elapsedTime / this.invisibleInterval) % 2 == 0)
+                {
+                    this.isSoundEnabled = true;
+                    this.isNoteDisplayEnabled = true;
+                }
+                else
+                {
+                    this.isSoundEnabled = false;
+                    this.isNoteDisplayEnabled = false;
+                }
             }
         }
         catch(error)
@@ -225,54 +241,57 @@ class App {
             this.canvasContext.textAlign = "center";
             this.canvasContext.fillText(`${this.bpm}`, this.canvas.width / 2, this.canvas.height / 3);
 
-            // draw marker
-            let xmargin = this.canvas.width / 10;
-            let barWidth = this.canvas.width - xmargin * 2;
-            let noteOffset = barWidth / this.totalNoteCount;
+            if(this.isNoteDisplayEnabled)
             {
-                let x = this.currentPositionInBar * barWidth + xmargin;
-                let y = this.canvas.height / 4 * 3;
-                let radius = this.canvas.width / 200;
-
-                this.canvasContext.beginPath();
-                this.canvasContext.arc(x, y, radius, 0, Math.PI * 2, false);
-                this.canvasContext.fill();
-            }
-
-            // draw notes
-            {
-                let radius_base = this.canvas.width / 100;
-                let currentNote = Math.floor(this.currentPositionInBar * this.totalNoteCount);
-                for(let i = 0; i < this.totalNoteCount + 1; i++) {
-                    let x = xmargin + noteOffset * i;
+                // draw marker
+                let xmargin = this.canvas.width / 10;
+                let barWidth = this.canvas.width - xmargin * 2;
+                let noteOffset = barWidth / this.totalNoteCount;
+                {
+                    let x = this.currentPositionInBar * barWidth + xmargin;
                     let y = this.canvas.height / 4 * 3;
-                    let radius = i % this.quaterNoteDivision == 0 ? radius_base * 2 : radius_base;
+                    let radius = this.canvas.width / 200;
 
                     this.canvasContext.beginPath();
                     this.canvasContext.arc(x, y, radius, 0, Math.PI * 2, false);
-                    if(i == currentNote) {
-                        this.canvasContext.fillStyle = "black";
-                        this.canvasContext.fill();
-                    }
-                    else {
-                        this.canvasContext.stroke();
+                    this.canvasContext.fill();
+                }
+
+                // draw notes
+                {
+                    let radius_base = this.canvas.width / 100;
+                    let currentNote = Math.floor(this.currentPositionInBar * this.totalNoteCount);
+                    for(let i = 0; i < this.totalNoteCount + 1; i++) {
+                        let x = xmargin + noteOffset * i;
+                        let y = this.canvas.height / 4 * 3;
+                        let radius = i % this.quaterNoteDivision == 0 ? radius_base * 2 : radius_base;
+
+                        this.canvasContext.beginPath();
+                        this.canvasContext.arc(x, y, radius, 0, Math.PI * 2, false);
+                        if(i == currentNote) {
+                            this.canvasContext.fillStyle = "black";
+                            this.canvasContext.fill();
+                        }
+                        else {
+                            this.canvasContext.stroke();
+                        }
                     }
                 }
-            }
 
-            // draw user beats
-            let currentBarNumber = Math.floor((this.currentTime - this.startTime - this.beatDelay) / this.secondsPerBar);
-            for(let i = 0; i < this.beatsQueue.length; i++){
-                let time = this.beatsQueue[i].time;
-                let positionInBar = Math.max(0, ((time - this.startTime - this.beatDelay) % this.secondsPerBar) / this.secondsPerBar);
-                let barNumber = Math.floor((time - this.startTime - this.beatDelay) / this.secondsPerBar);
-                let radius = 10;
-                let x = positionInBar * barWidth + xmargin;
-                let y = this.canvas.height / 5 * 3 - (currentBarNumber - barNumber) * radius * 3;
-                
-                this.canvasContext.beginPath();
-                this.canvasContext.arc(x, y, radius, 0, Math.PI * 2, false);
-                this.canvasContext.fill();
+                // draw user beats
+                let currentBarNumber = Math.floor((this.currentTime - this.startTime - this.beatDelay) / this.secondsPerBar);
+                for(let i = 0; i < this.beatsQueue.length; i++){
+                    let time = this.beatsQueue[i].time;
+                    let positionInBar = Math.max(0, ((time - this.startTime - this.beatDelay) % this.secondsPerBar) / this.secondsPerBar);
+                    let barNumber = Math.floor((time - this.startTime - this.beatDelay) / this.secondsPerBar);
+                    let radius = 10;
+                    let x = positionInBar * barWidth + xmargin;
+                    let y = this.canvas.height / 5 * 3 - (currentBarNumber - barNumber) * radius * 3;
+                    
+                    this.canvasContext.beginPath();
+                    this.canvasContext.arc(x, y, radius, 0, Math.PI * 2, false);
+                    this.canvasContext.fill();
+                }
             }
         }
         catch(error)
@@ -290,21 +309,24 @@ class App {
     scheduleNote() {
         try
         {
-            var osc = this.audioContext.createOscillator();
-            osc.connect(this.audioContext.destination);
+            if(this.isSoundEnabled)
+            {
+                var osc = this.audioContext.createOscillator();
+                osc.connect(this.audioContext.destination);
 
-            if (this.nextScheduleNote == 0){
-                osc.frequency.setValueAtTime(880.0, 0);
+                if (this.nextScheduleNote == 0){
+                    osc.frequency.setValueAtTime(880.0, 0);
+                }
+                else if (this.nextScheduleNote % this.quaterNoteDivision == 0 ) {
+                    osc.frequency.setValueAtTime(440.0, 0);
+                }
+                else {
+                    osc.frequency.setValueAtTime(220.0, 0);
+                }
+            
+                osc.start(this.nextScheduleNoteTime);
+                osc.stop(this.nextScheduleNoteTime + this.noteSoundLength);
             }
-            else if (this.nextScheduleNote % this.quaterNoteDivision == 0 ) {
-                osc.frequency.setValueAtTime(440.0, 0);
-            }
-            else {
-                osc.frequency.setValueAtTime(220.0, 0);
-            }
-        
-            osc.start(this.nextScheduleNoteTime);
-            osc.stop(this.nextScheduleNoteTime + this.noteSoundLength);
 
             this.nextScheduleNote = (this.nextScheduleNote + 1) % this.totalNoteCount;
             this.nextScheduleNoteTime += this.secondsPerNote;
